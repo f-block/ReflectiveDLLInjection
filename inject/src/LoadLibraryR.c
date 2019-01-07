@@ -207,12 +207,32 @@ HANDLE WINAPI LoadRemoteLibraryR( HANDLE hProcess, LPVOID lpBuffer, DWORD dwLeng
 				break;
 
 			// alloc memory (RWX) in the host process for the image...
-			lpRemoteLibraryBuffer = VirtualAllocEx(hProcess, NULL, dwLength, MEM_RESERVE | MEM_COMMIT, PAGE_READONLY);
+			lpRemoteLibraryBuffer = VirtualAllocEx(hProcess, NULL, dwLength + 4096, MEM_RESERVE | MEM_COMMIT, PAGE_READONLY);
 			DWORD oldPrection;
+			LPVOID temp;
+			temp = lpRemoteLibraryBuffer;
+			lpRemoteLibraryBuffer = (char*)(lpRemoteLibraryBuffer)+ 4096;
 			VirtualProtectEx(hProcess, lpRemoteLibraryBuffer, dwLength, PAGE_EXECUTE_READWRITE, &oldPrection);
 			if( !lpRemoteLibraryBuffer )
 				break;
+			
+			MEMORY_BASIC_INFORMATION basic_info;
+			basic_info.Protect = 0x99999999;
+			printf("[++] Test: %x.\n", basic_info.Protect);
+			SIZE_T returnValue;
+			returnValue = VirtualQueryEx(hProcess, temp, &basic_info, sizeof(MEMORY_BASIC_INFORMATION));
 
+			if (returnValue > 0) {
+				printf("[++] Initial Protection for vad: %#02x.\n", basic_info.AllocationProtect);
+				printf("[++] Current Protection for beginning of vad: %#02x.\n", basic_info.Protect);
+			}
+
+			returnValue = VirtualQueryEx(hProcess, lpRemoteLibraryBuffer, &basic_info, sizeof(MEMORY_BASIC_INFORMATION));
+
+			if (returnValue > 0) {
+				printf("[++] Current Protection for injected DLL part: %#02x.\n", basic_info.Protect);
+			}
+			
 			// write the image into the host process...
 			if( !WriteProcessMemory( hProcess, lpRemoteLibraryBuffer, lpBuffer, dwLength, NULL ) )
 				break;
