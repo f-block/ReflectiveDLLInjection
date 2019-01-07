@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //===============================================================================================//
 #include "ReflectiveLoader.h"
+#include "windows.h"
 //===============================================================================================//
 // Our loader will set this to a pseudo correct HINSTANCE/HMODULE value
 HINSTANCE hAppInstance = NULL;
@@ -55,6 +56,7 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 	LOADLIBRARYA pLoadLibraryA     = NULL;
 	GETPROCADDRESS pGetProcAddress = NULL;
 	VIRTUALALLOC pVirtualAlloc     = NULL;
+	VIRTUALPROTECT pVirtualProtect = NULL;
 	NTFLUSHINSTRUCTIONCACHE pNtFlushInstructionCache = NULL;
 
 	USHORT usCounter;
@@ -63,6 +65,7 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 	ULONG_PTR uiLibraryAddress;
 	// the kernels base address and later this images newly loaded base address
 	ULONG_PTR uiBaseAddress;
+	LPVOID temp;
 
 	// variables for processing the kernels export table
 	ULONG_PTR uiAddressArray;
@@ -164,16 +167,16 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 			// get the VA for the array of name ordinals
 			uiNameOrdinals = ( uiBaseAddress + ((PIMAGE_EXPORT_DIRECTORY )uiExportDir)->AddressOfNameOrdinals );
 
-			usCounter = 3;
+			usCounter = 4;
 
 			// loop while we still have imports to find
-			while( usCounter > 0 )
+			while (usCounter > 0)
 			{
 				// compute the hash values for this function name
-				dwHashValue = hash( (char *)( uiBaseAddress + DEREF_32( uiNameArray ) )  );
-				
+				dwHashValue = hash((char *)(uiBaseAddress + DEREF_32(uiNameArray)));
+
 				// if we have found a function we want we get its virtual address
-				if( dwHashValue == LOADLIBRARYA_HASH || dwHashValue == GETPROCADDRESS_HASH || dwHashValue == VIRTUALALLOC_HASH )
+				if (dwHashValue == LOADLIBRARYA_HASH || dwHashValue == GETPROCADDRESS_HASH || dwHashValue == VIRTUALALLOC_HASH || dwHashValue == VIRTUALPROTECT_HASH)
 				{
 					// get the VA for the array of addresses
 					uiAddressArray = ( uiBaseAddress + ((PIMAGE_EXPORT_DIRECTORY )uiExportDir)->AddressOfFunctions );
@@ -186,8 +189,10 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 						pLoadLibraryA = (LOADLIBRARYA)( uiBaseAddress + DEREF_32( uiAddressArray ) );
 					else if( dwHashValue == GETPROCADDRESS_HASH )
 						pGetProcAddress = (GETPROCADDRESS)( uiBaseAddress + DEREF_32( uiAddressArray ) );
-					else if( dwHashValue == VIRTUALALLOC_HASH )
-						pVirtualAlloc = (VIRTUALALLOC)( uiBaseAddress + DEREF_32( uiAddressArray ) );
+					else if (dwHashValue == VIRTUALALLOC_HASH)
+						pVirtualAlloc = (VIRTUALALLOC)(uiBaseAddress + DEREF_32(uiAddressArray));
+					else if (dwHashValue == VIRTUALPROTECT_HASH)
+						pVirtualProtect = (VIRTUALPROTECT)(uiBaseAddress + DEREF_32(uiAddressArray));
 			
 					// decrement our counter
 					usCounter--;
@@ -227,7 +232,7 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 			{
 				// compute the hash values for this function name
 				dwHashValue = hash( (char *)( uiBaseAddress + DEREF_32( uiNameArray ) )  );
-				
+
 				// if we have found a function we want we get its virtual address
 				if( dwHashValue == NTFLUSHINSTRUCTIONCACHE_HASH )
 				{
@@ -254,7 +259,7 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 		}
 
 		// we stop searching when we have found everything we need.
-		if( pLoadLibraryA && pGetProcAddress && pVirtualAlloc && pNtFlushInstructionCache )
+		if( pLoadLibraryA && pGetProcAddress && pVirtualAlloc && pNtFlushInstructionCache && pVirtualProtect)
 			break;
 
 		// get the next entry
@@ -268,7 +273,10 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 
 	// allocate all the memory for the DLL to be loaded into. we can load at any address because we will  
 	// relocate the image. Also zeros all memory and marks it as READ, WRITE and EXECUTE to avoid any problems.
-	uiBaseAddress = (ULONG_PTR)pVirtualAlloc( NULL, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, MEM_RESERVE|MEM_COMMIT, PAGE_EXECUTE_READWRITE );
+	uiBaseAddress = (ULONG_PTR)pVirtualAlloc(NULL, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, MEM_RESERVE, PAGE_READONLY);
+	uiBaseAddress = (ULONG_PTR)pVirtualAlloc((LPVOID)uiBaseAddress, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	//DWORD oldProtect;
+	//pVirtualProtect((LPVOID)uiBaseAddress, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &oldProtect);
 
 	// we must now copy over the headers
 	uiValueA = ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfHeaders;
