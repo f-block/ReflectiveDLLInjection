@@ -274,9 +274,8 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader( VOID )
 	// allocate all the memory for the DLL to be loaded into. we can load at any address because we will  
 	// relocate the image. Also zeros all memory and marks it as READ, WRITE and EXECUTE to avoid any problems.
 	uiBaseAddress = (ULONG_PTR)pVirtualAlloc(NULL, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, MEM_RESERVE, PAGE_READONLY);
-	uiBaseAddress = (ULONG_PTR)pVirtualAlloc((LPVOID)uiBaseAddress, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	//DWORD oldProtect;
-	//pVirtualProtect((LPVOID)uiBaseAddress, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &oldProtect);
+	DWORD oldProtect;
+	pVirtualProtect((LPVOID)uiBaseAddress, ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &oldProtect);
 
 	// we must now copy over the headers
 	uiValueA = ((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader.SizeOfHeaders;
